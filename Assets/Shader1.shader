@@ -3,7 +3,12 @@ Shader "Unlit/Shader1"
     Properties
     {
         //_MainTex ("Texture", 2D) = "white" {}
-        _Value ("Value", Float) = 1.0
+        _ColorA ("ColorA", Color) = (1,1,1,1)
+        _ColorB ("ColorB", Color) = (0,0,0,1)
+        _ColorStart ("ColorStart", Range(0,1)) = 1
+        _ColorEnd ("ColorEnd", Range(0,1)) = 0
+        _Scale ("Scale", Float) = 1
+        _Offset ("Offset", Float) = 0
     }
     SubShader
     {
@@ -17,41 +22,56 @@ Shader "Unlit/Shader1"
 
             #include "UnityCG.cginc"
 
-            float _Value;
+            float4 _ColorA;
+            float4 _ColorB;
+            float _ColorStart;
+            float _ColorEnd;
+            float _Scale;
+            float _Offset;
             
             struct MeshData // per-vertex mesh data
             {
                 float4 vertex : POSITION; // vertex position
-                // float3 normal : NORMAL;
+                float3 normal : NORMAL;
                 // float4 tangent : TANGENT;
                 // float4 color : COLOR;
                 float2 uv0 : TEXCOORD0; // uv0 coordinates
                 // float2 uv1 : TEXCOORD1; // uv1 coordinates
             };
 
-            struct v2f
+            struct Interpolators // vertex to fragment
             {
-                float2 uv : TEXCOORD0;
-                UNITY_FOG_COORDS(1)
-                float4 vertex : SV_POSITION;
+                float4 vertex : SV_POSITION; // clip space position
+                float3 normal : TEXCOORD0; // doesn't relate to actual uv, can be what ever floats
+                float2 uv : TEXCOORD1;
             };
 
-            v2f vert (MeshData v)
+            Interpolators vert (MeshData v)
             {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv0, _MainTex);
-                UNITY_TRANSFER_FOG(o,o.vertex);
+                Interpolators o; // output
+                //o.vertex = v.vertex;
+                o.vertex = UnityObjectToClipPos(v.vertex); // local space to clip space
+                o.normal = v.normal; // UnityObjectToWorldNormal(v.normal); change to world normal
+                o.uv = v.uv0; // (v.uv0+_Offset) * _Scale;
                 return o;
             }
 
-            fixed4 frag (v2f i) : SV_Target
+            // define Inverselerp function, doesn't care the direction
+            float InverseLerp( float a, float b, float v)
             {
-                // sample the texture
-                fixed4 col = tex2D(_MainTex, i.uv);
-                // apply fog
-                UNITY_APPLY_FOG(i.fogCoord, col);
-                return col;
+                return (v-a)/(b-a);
+            }
+            
+            // float (32 bit float): everywhere
+            // half (16 bit float): mostly used
+            // fixed (lower precision) -1 to 1
+            float4 frag (Interpolators i) : SV_Target
+            {
+                // float4 myValue;
+                // float2 otherValue = myValue.xy; // swizzling, rgba, xyzw
+                float t = saturate(InverseLerp(_ColorStart, _ColorEnd, i.uv.x)); // saturate: clamp into 0 to 1
+                float4 outColor = lerp(_ColorA, _ColorB, t);
+                return outColor;
             }
             ENDCG
         }
